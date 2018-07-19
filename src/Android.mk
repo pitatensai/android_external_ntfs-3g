@@ -15,7 +15,8 @@ LOCAL_CFLAGS := -O2 -g -W -Wall \
 	-D_LARGEFILE_SOURCE \
 	-D_FILE_OFFSET_BITS=64 \
 	-DHAVE_CONFIG_H
- 
+
+LOCAL_CFLAGS += -Wno-error 
 LOCAL_MODULE := ntfs-3g
 LOCAL_MODULE_TAGS := optional
 
@@ -40,7 +41,8 @@ LOCAL_CFLAGS := -O2 -g -W -Wall \
 	-D_LARGEFILE_SOURCE \
 	-D_FILE_OFFSET_BITS=64 \
 	-DHAVE_CONFIG_H
- 
+
+LOCAL_CFLAGS += -Wno-error 
 LOCAL_MODULE := lowntfs-3g
 LOCAL_MODULE_TAGS := optional
 
@@ -67,7 +69,7 @@ LOCAL_CFLAGS := -O2 -g -W -Wall \
  
 LOCAL_MODULE := usermap
 LOCAL_MODULE_TAGS := optional
-
+LOCAL_CFLAGS += -Wno-error
 LOCAL_SHARED_LIBRARIES := libc libutils libntfs-3g
 LOCAL_STATIC_LIBRARIES := libfuse-lite 
  

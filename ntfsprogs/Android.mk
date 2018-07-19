@@ -13,7 +13,7 @@ LOCAL_SRC_FILES :=  \
 
 LOCAL_MODULE := mkntfs
 LOCAL_MODULE_TAGS := optional
-
+LOCAL_CFLAGS += -Wno-error
 LOCAL_SHARED_LIBRARIES := libntfs-3g
 
 LOCAL_C_INCLUDES :=  \
@@ -40,7 +40,7 @@ LOCAL_SHARED_LIBRARIES := libntfs-3g
 LOCAL_C_INCLUDES :=  \
 	$(LOCAL_PATH)/../include/ntfs-3g \
 	$(LOCAL_PATH)/..
-
+LOCAL_CFLAGS += -Wno-error
 LOCAL_CFLAGS := -O2 -g -W -Wall -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_CONFIG_H
 
 include $(BUILD_EXECUTABLE)

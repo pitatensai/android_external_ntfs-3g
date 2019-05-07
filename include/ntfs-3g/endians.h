@@ -52,7 +52,7 @@
 #include <sys/param.h>
 #endif
 
-#define __BYTE_ORDER BYTE_ORDER
+//#define __BYTE_ORDER BYTE_ORDER
 
 #ifndef __BYTE_ORDER
 #	if defined(_BYTE_ORDER)

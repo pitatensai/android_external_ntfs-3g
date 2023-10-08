@@ -4,6 +4,9 @@
 /* Define if building universal (internal helper macro) */
 /* #undef AC_APPLE_UNIVERSAL_BUILD */
 
+/* Define to 1 for disabling reparse plugins */
+/* #undef DISABLE_PLUGINS */
+
 /* Define this to 1 if you want to enable support of encrypted files in
    libntfs and utilities. */
 /* #undef ENABLE_CRYPTO */
@@ -20,7 +23,7 @@
 
 /* Define this to 1 if you want to enable generation of DCE compliant UUIDs.
    */
-/* #undef ENABLE_UUID */
+// #define ENABLE_UUID 1
 
 /* Define to 1 if using internal fuse */
 #define FUSE_INTERNAL 1
@@ -53,7 +56,7 @@
 #define HAVE_DUP2 1
 
 /* Define to 1 if you have the <endian.h> header file. */
-// #define HAVE_ENDIAN_H 1
+#define HAVE_ENDIAN_H 1
 
 /* Define to 1 if you have the <errno.h> header file. */
 #define HAVE_ERRNO_H 1
@@ -86,10 +89,13 @@
 #define HAVE_GETTIMEOFDAY 1
 
 /* Define to 1 if you have the `hasmntopt' function. */
-// #define HAVE_HASMNTOPT 1
+#define HAVE_HASMNTOPT 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
+
+/* Define to 1 if you have the `c' library (-lc). */
+/* #undef HAVE_LIBC */
 
 /* Define to 1 if you have the <libgen.h> header file. */
 #define HAVE_LIBGEN_H 1
@@ -119,7 +125,7 @@
 /* #undef HAVE_MACHINE_ENDIAN_H */
 
 /* Define to 1 if you have the <malloc.h> header file. */
-// #define HAVE_MALLOC_H 1
+#define HAVE_MALLOC_H 1
 
 /* Define to 1 if mbrtowc and mbstate_t are properly declared. */
 #define HAVE_MBRTOWC 1
@@ -222,7 +228,7 @@
 #define HAVE_STRTOUL 1
 
 /* Define to 1 if `st_atim' is a member of `struct stat'. */
-// #define HAVE_STRUCT_STAT_ST_ATIM 1
+#define HAVE_STRUCT_STAT_ST_ATIM 1
 
 /* Define to 1 if `st_atimensec' is a member of `struct stat'. */
 /* #undef HAVE_STRUCT_STAT_ST_ATIMENSEC */
@@ -258,9 +264,6 @@
 /* Define to 1 if you have the <sys/ioctl.h> header file. */
 #define HAVE_SYS_IOCTL_H 1
 
-/* Define to 1 if you have the <sys/mkdev.h> header file. */
-/* #undef HAVE_SYS_MKDEV_H */
-
 /* Define to 1 if you have the <sys/mount.h> header file. */
 #define HAVE_SYS_MOUNT_H 1
 
@@ -272,9 +275,6 @@
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
-
-/* Define to 1 if you have the <sys/sysmacros.h> header file. */
-#define HAVE_SYS_SYSMACROS_H 1
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
@@ -292,7 +292,7 @@
 #define HAVE_UTIME 1
 
 /* Define to 1 if you have the `utimensat' function. */
-// #define HAVE_UTIMENSAT 1
+#define HAVE_UTIMENSAT 1
 
 /* Define to 1 if you have the <utime.h> header file. */
 #define HAVE_UTIME_H 1
@@ -319,9 +319,16 @@
    slash. */
 #define LSTAT_FOLLOWS_SLASHED_SYMLINK 1
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #define LT_OBJDIR ".libs/"
+
+/* Define to 1 if `major', `minor', and `makedev' are declared in <mkdev.h>.
+   */
+/* #undef MAJOR_IN_MKDEV */
+
+/* Define to 1 if `major', `minor', and `makedev' are declared in
+   <sysmacros.h>. */
+#define MAJOR_IN_SYSMACROS 1
 
 /* Don't use default IO ops */
 /* #undef NO_NTFS_DEVICE_DEFAULT_IO_OPS */
@@ -336,7 +343,7 @@
 #define PACKAGE_NAME "ntfs-3g"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "ntfs-3g 2015.3.14"
+#define PACKAGE_STRING "ntfs-3g 2017.3.23"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "ntfs-3g"
@@ -345,7 +352,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "2015.3.14"
+#define PACKAGE_VERSION "2017.3.23"
 
 /* POSIX ACL support */
 /* #undef POSIXACLS */
@@ -376,7 +383,7 @@
 
 
 /* Version number of package */
-#define VERSION "2015.3.14"
+#define VERSION "2017.3.23"
 
 /* Define to 1 if this is a Windows OS */
 /* #undef WINDOWS */
@@ -438,10 +445,3 @@
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 /* #undef size_t */
-
-#define S_IREAD        S_IRUSR
-#define S_IWRITE       S_IWUSR
-#define S_IEXEC        S_IXUSR
-
-#include <sys/types.h>
-#define off_t long long

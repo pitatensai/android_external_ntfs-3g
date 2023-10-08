@@ -40,7 +40,13 @@
 #include <sys/stat.h>
 #endif
 
-#ifdef HAVE_SYS_SYSMACROS_H
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef MAJOR_IN_MKDEV
+#include <sys/mkdev.h>
+#endif
+#ifdef MAJOR_IN_SYSMACROS
 #include <sys/sysmacros.h>
 #endif
 
@@ -61,10 +67,7 @@
 #include "security.h"
 #include "reparse.h"
 #include "object_id.h"
-
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
+#include "xattrs.h"
 
 /*
  * The little endian Unicode strings "$I30", "$SII", "$SDH", "$O"
@@ -384,7 +387,7 @@ u64 ntfs_inode_lookup_by_name(ntfs_inode *dir_ni,
 	}
 
 	/* Get the starting vcn of the index_block holding the child node. */
-	vcn = sle64_to_cpup((u8*)ie + le16_to_cpu(ie->length) - 8);
+	vcn = sle64_to_cpup((sle64*)((u8*)ie + le16_to_cpu(ie->length) - 8));
 
 descend_into_child_node:
 
@@ -496,7 +499,7 @@ descend_into_child_node:
 			goto close_err_out;
 		}
 		/* Child node present, descend into it. */
-		vcn = sle64_to_cpup((u8*)ie + le16_to_cpu(ie->length) - 8);
+		vcn = sle64_to_cpup((sle64*)((u8*)ie + le16_to_cpu(ie->length) - 8));
 		if (vcn >= 0)
 			goto descend_into_child_node;
 		ntfs_log_error("Negative child node vcn in directory inode "
@@ -875,7 +878,7 @@ typedef enum {
  *	and most metadata files have such similar patters.
  */
 
-static u32 ntfs_interix_types(ntfs_inode *ni)
+u32 ntfs_interix_types(ntfs_inode *ni)
 {
 	ntfs_attr *na;
 	u32 dt_type;
@@ -884,8 +887,14 @@ static u32 ntfs_interix_types(ntfs_inode *ni)
 	dt_type = NTFS_DT_UNKNOWN;
 	na = ntfs_attr_open(ni, AT_DATA, NULL, 0);
 	if (na) {
-		/* Unrecognized patterns (eg HID + SYST) are plain files */
-		dt_type = NTFS_DT_REG;
+		/*
+		 * Unrecognized patterns (eg HID + SYST for metadata)
+		 * are plain files or directories
+		 */
+		if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY)
+			dt_type = NTFS_DT_DIR;
+		else
+			dt_type = NTFS_DT_REG;
 		if (na->data_size <= 1) {
 			if (!(ni->flags & FILE_ATTR_HIDDEN))
 				dt_type = (na->data_size ?
@@ -1531,7 +1540,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	si->last_access_time = ni->last_access_time;
 	if (securid) {
 		set_nino_flag(ni, v3_Extensions);
-		ni->owner_id = si->owner_id = 0;
+		ni->owner_id = si->owner_id = const_cpu_to_le32(0);
 		ni->security_id = si->security_id = securid;
 		ni->quota_charged = si->quota_charged = const_cpu_to_le64(0);
 		ni->usn = si->usn = const_cpu_to_le64(0);
@@ -1599,12 +1608,12 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 			ir->clusters_per_index_block = 
 					ni->vol->indx_record_size >>
 					NTFS_BLOCK_SIZE_BITS;
-		ir->index.entries_offset = cpu_to_le32(sizeof(INDEX_HEADER));
+		ir->index.entries_offset = const_cpu_to_le32(sizeof(INDEX_HEADER));
 		ir->index.index_length = cpu_to_le32(index_len);
 		ir->index.allocated_size = cpu_to_le32(index_len);
 		ie = (INDEX_ENTRY*)((u8*)ir + sizeof(INDEX_ROOT));
-		ie->length = cpu_to_le16(sizeof(INDEX_ENTRY_HEADER));
-		ie->key_length = 0;
+		ie->length = const_cpu_to_le16(sizeof(INDEX_ENTRY_HEADER));
+		ie->key_length = const_cpu_to_le16(0);
 		ie->ie_flags = INDEX_ENTRY_END;
 		/* Add INDEX_ROOT attribute to inode. */
 		if (ntfs_attr_add(ni, AT_INDEX_ROOT, NTFS_INDEX_I30, 4,
@@ -1691,7 +1700,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	fn->last_mft_change_time = ni->last_mft_change_time;
 	fn->last_access_time = ni->last_access_time;
 	if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY)
-		fn->data_size = fn->allocated_size = const_cpu_to_le64(0);
+		fn->data_size = fn->allocated_size = const_cpu_to_sle64(0);
 	else {
 		fn->data_size = cpu_to_sle64(ni->data_size);
 		fn->allocated_size = cpu_to_sle64(ni->allocated_size);
@@ -1711,7 +1720,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 		goto err_out;
 	}
 	/* Set hard links count and directory flag. */
-	ni->mrec->link_count = cpu_to_le16(1);
+	ni->mrec->link_count = const_cpu_to_le16(1);
 	if (S_ISDIR(type))
 		ni->mrec->flags |= MFT_RECORD_IS_DIRECTORY;
 	ntfs_inode_mark_dirty(ni);
@@ -1892,20 +1901,23 @@ int ntfs_delete(ntfs_volume *vol, const char *pathname,
 	if (!actx)
 		goto err_out;
 search:
-	while (!ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0, CASE_SENSITIVE,
-			0, NULL, 0, actx)) {
+	while (!(err = ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0,
+					CASE_SENSITIVE, 0, NULL, 0, actx))) {
+	#ifdef DEBUG
 		char *s;
+	#endif
 		IGNORE_CASE_BOOL case_sensitive = IGNORE_CASE;
 
-		errno = 0;
 		fn = (FILE_NAME_ATTR*)((u8*)actx->attr +
 				le16_to_cpu(actx->attr->value_offset));
+	#ifdef DEBUG
 		s = ntfs_attr_name_get(fn->file_name, fn->file_name_length);
 		ntfs_log_trace("name: '%s'  type: %d  dos: %d  win32: %d  "
 			       "case: %d\n", s, fn->file_name_type,
 			       looking_for_dos_name, looking_for_win32_name,
 			       case_sensitive_match);
 		ntfs_attr_name_free(&s);
+	#endif
 		if (looking_for_dos_name) {
 			if (fn->file_name_type == FILE_NAME_DOS)
 				break;
@@ -1946,7 +1958,7 @@ search:
 			break;
 		}
 	}
-	if (errno) {
+	if (err) {
 		/*
 		 * If case sensitive search failed, then try once again
 		 * ignoring case.
@@ -1970,7 +1982,7 @@ search:
 	 * (Windows also does so), however delete the name if it were
 	 * in an extent, to avoid leaving an attribute list.
 	 */
-	if ((ni->mrec->link_count == cpu_to_le16(1)) && !actx->base_ntfs_ino) {
+	if ((ni->mrec->link_count == const_cpu_to_le16(1)) && !actx->base_ntfs_ino) {
 			/* make sure to not loop to another search */
 		looking_for_dos_name = FALSE;
 	} else {
@@ -2157,11 +2169,6 @@ static int ntfs_link_i(ntfs_inode *ni, ntfs_inode *dir_ni, const ntfschar *name,
 		goto err_out;
 	}
 	
-	if ((ni->flags & FILE_ATTR_REPARSE_POINT)
-	   && !ntfs_possible_symlink(ni)) {
-		err = EOPNOTSUPP;
-		goto err_out;
-	}
 	if (NVolHideDotFiles(dir_ni->vol)) {
 		/* Set hidden flag according to the latest name */
 		if ((name_len > 1)
@@ -2186,7 +2193,7 @@ static int ntfs_link_i(ntfs_inode *ni, ntfs_inode *dir_ni, const ntfschar *name,
 	fn->file_attributes = ni->flags;
 	if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY) {
 		fn->file_attributes |= FILE_ATTR_I30_INDEX_PRESENT;
-		fn->data_size = fn->allocated_size = const_cpu_to_le64(0);
+		fn->data_size = fn->allocated_size = const_cpu_to_sle64(0);
 	} else {
 		fn->allocated_size = cpu_to_sle64(ni->allocated_size);
 		fn->data_size = cpu_to_sle64(ni->data_size);
@@ -2272,8 +2279,6 @@ ntfs_inode *ntfs_dir_parent_inode(ntfs_inode *ni)
 	}
 	return (dir_ni);
 }
-
-#ifdef HAVE_SETXATTR
 
 #define MAX_DOS_NAME_LENGTH	 12
 
@@ -2423,11 +2428,11 @@ int ntfs_get_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 			 */
 		ntfs_name_upcase(dosname, doslen,
 				ni->vol->upcase, ni->vol->upcase_len);
-		if (ntfs_ucstombs(dosname, doslen, &outname, size) < 0) {
+		outsize = ntfs_ucstombs(dosname, doslen, &outname, 0);
+		if (outsize < 0) {
 			ntfs_log_error("Cannot represent dosname in current locale.\n");
 			outsize = -errno;
 		} else {
-			outsize = strlen(outname);
 			if (value && (outsize <= (int)size))
 				memcpy(value, outname, outsize);
 			else
@@ -2649,9 +2654,12 @@ int ntfs_set_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 	shortlen = ntfs_mbstoucs(newname, &shortname);
 	if (shortlen > MAX_DOS_NAME_LENGTH)
 		shortlen = MAX_DOS_NAME_LENGTH;
-			/* make sure the short name has valid chars */
+
+	/* Make sure the short name has valid chars.
+	 * Note: the short name cannot end with dot or space, but the
+	 * corresponding long name can. */
 	if ((shortlen < 0)
-	    || ntfs_forbidden_names(ni->vol,shortname,shortlen)) {
+	    || ntfs_forbidden_names(ni->vol,shortname,shortlen,TRUE)) {
 		ntfs_inode_close_in_dir(ni,dir_ni);
 		ntfs_inode_close(dir_ni);
 		res = -errno;
@@ -2662,7 +2670,8 @@ int ntfs_set_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 	if (longlen > 0) {
 		oldlen = get_dos_name(ni, dnum, oldname);
 		if ((oldlen >= 0)
-		    && !ntfs_forbidden_names(ni->vol, longname, longlen)) {
+		    && !ntfs_forbidden_names(ni->vol, longname, longlen,
+					     FALSE)) {
 			if (oldlen > 0) {
 				if (flags & XATTR_CREATE) {
 					res = -1;
@@ -2783,5 +2792,3 @@ int ntfs_remove_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 	}
 	return (res);
 }
-
-#endif

@@ -22,6 +22,16 @@
 #include <limits.h>
 #include <errno.h>
 
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef MAJOR_IN_MKDEV
+#include <sys/mkdev.h>
+#endif
+#ifdef MAJOR_IN_SYSMACROS
+#include <sys/sysmacros.h>
+#endif
+
 #define PARAM(inarg) (((const char *)(inarg)) + sizeof(*(inarg)))
 #define OFFSET_MAX 0x7fffffffffffffffLL
 
@@ -69,7 +79,13 @@ static void convert_stat(const struct stat *stbuf, struct fuse_attr *attr)
     attr->nlink     = stbuf->st_nlink;
     attr->uid       = stbuf->st_uid;
     attr->gid       = stbuf->st_gid;
+#if defined(__SOLARIS__) && defined(_LP64)
+	/* Must pack the device the old way (attr->rdev limited to 32 bits) */
+    attr->rdev      = ((major(stbuf->st_rdev) & 0x3fff) << 18)
+			| (minor(stbuf->st_rdev) & 0x3ffff);
+#else
     attr->rdev      = stbuf->st_rdev;
+#endif
     attr->size      = stbuf->st_size;
     attr->blocks    = stbuf->st_blocks;
     attr->atime     = stbuf->st_atime;
@@ -378,6 +394,11 @@ int fuse_reply_readlink(fuse_req_t req, const char *linkname)
     return send_reply_ok(req, linkname, strlen(linkname));
 }
 
+int fuse_reply_canonical_path(fuse_req_t req, const char *path)
+{
+    return send_reply_ok(req, path, strlen(path));
+}
+
 int fuse_reply_open(fuse_req_t req, const struct fuse_file_info *f)
 {
     struct fuse_open_out arg;
@@ -543,6 +564,16 @@ static void do_readlink(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
         fuse_reply_err(req, ENOSYS);
 }
 
+static void do_canonical_path(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
+{
+    (void) inarg;
+
+    if (req->f->op.canonical_path)
+        req->f->op.canonical_path(req, nodeid);
+    else
+        fuse_reply_err(req, ENOSYS);
+}
+
 static void do_mknod(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
 {
     const struct fuse_mknod_in *arg = (const struct fuse_mknod_in *) inarg;
@@ -553,9 +584,19 @@ static void do_mknod(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
     else
 	name = (const char *) inarg + FUSE_COMPAT_MKNOD_IN_SIZE;
 
-    if (req->f->op.mknod)
+    if (req->f->op.mknod) {
+#if defined(__SOLARIS__) && defined(_LP64)
+	/*
+	 * Must unpack the device, as arg->rdev is limited to 32 bits,
+	 * and must have the same format in 32-bit and 64-bit builds.
+	 */
+	req->f->op.mknod(req, nodeid, name, arg->mode,
+		makedev((arg->rdev >> 18) & 0x3fff,
+			arg->rdev & 0x3ffff));
+#else
 	req->f->op.mknod(req, nodeid, name, arg->mode, arg->rdev);
-    else
+#endif
+    } else
         fuse_reply_err(req, ENOSYS);
 }
 
@@ -1077,6 +1118,8 @@ static void do_init(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
 #ifdef POSIXACLS
 	if (arg->flags & FUSE_DONT_MASK)
 	    f->conn.capable |= FUSE_CAP_DONT_MASK;
+	if (arg->flags & FUSE_POSIX_ACL)
+	    f->conn.capable |= FUSE_CAP_POSIX_ACL;
 #endif
 	if (arg->flags & FUSE_BIG_WRITES)
 	    f->conn.capable |= FUSE_CAP_BIG_WRITES;
@@ -1117,6 +1160,8 @@ static void do_init(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
 #ifdef POSIXACLS
 	    if (f->conn.want & FUSE_CAP_DONT_MASK)
 		outarg.flags |= FUSE_DONT_MASK;
+	    if (f->conn.want & FUSE_CAP_POSIX_ACL)
+		outarg.flags |= FUSE_POSIX_ACL;
 #endif
     } else {
 	/* Never use a version more recent than supported by the kernel */
@@ -1131,6 +1176,8 @@ static void do_init(fuse_req_t req, fuse_ino_t nodeid, const void *inarg)
 #ifdef POSIXACLS
 	    if (f->conn.want & FUSE_CAP_DONT_MASK)
 		outarg.flags |= FUSE_DONT_MASK;
+	    if (f->conn.want & FUSE_CAP_POSIX_ACL)
+		outarg.flags |= FUSE_POSIX_ACL;
 #endif
     	}
     }
@@ -1208,6 +1255,7 @@ static struct {
     [FUSE_GETATTR]     = { do_getattr,     "GETATTR"     },
     [FUSE_SETATTR]     = { do_setattr,     "SETATTR"     },
     [FUSE_READLINK]    = { do_readlink,    "READLINK"    },
+    [FUSE_CANONICAL_PATH] = { do_canonical_path, "CANONICAL_PATH" },
     [FUSE_SYMLINK]     = { do_symlink,     "SYMLINK"     },
     [FUSE_MKNOD]       = { do_mknod,       "MKNOD"       },
     [FUSE_MKDIR]       = { do_mkdir,       "MKDIR"       },

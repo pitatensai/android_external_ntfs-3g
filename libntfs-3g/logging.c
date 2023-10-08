@@ -65,14 +65,6 @@ static int tab;
 # define  BROKEN_GCC_FORMAT_ATTRIBUTE __attribute__((format(printf, 6, 0)))
 #endif
 
-#if PLATFORM_SDK_VERSION >= 16
-#define LOGV(fmt,args...) ALOGV(fmt,##args)
-#define LOGD(fmt,args...) ALOGD(fmt,##args)
-#define LOGI(fmt,args...) ALOGI(fmt,##args)
-#define LOGW(fmt,args...) ALOGW(fmt,##args)
-#define LOGE(fmt,args...) ALOGE(fmt,##args)
-#endif
-
 /**
  * struct ntfs_logging - Control info for the logging system
  * @levels:	Bitfield of logging levels
@@ -328,18 +320,24 @@ void ntfs_log_set_handler(ntfs_log_handler *handler)
 int ntfs_log_redirect(const char *function, const char *file,
 	int line, u32 level, void *data, const char *format, ...)
 {
-    #if 1
+#ifdef __ANDROID_API__
 	va_list args;
-    char szBuf[512];
+	char szInfo[256];
+	char szLog[768];
 
+	if (!(ntfs_log.levels & level))		/* Don't log this message */
+		return 0;
+
+	snprintf(szInfo, sizeof(szInfo),
+		"file: %s, function: %s, line: %d", file, function, line);
+	
 	va_start(args, format);
-    vsnprintf(szBuf, sizeof(szBuf)/2, format, args);
+	vsnprintf(szLog, sizeof(szLog), format, args);
 	va_end(args);
-	snprintf(&(szBuf[sizeof(szBuf)/2]), sizeof(szBuf)/2, 
-		", file: %s, function: %s, line: %d", file, function, line);
-	//__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_DEBUG, LOG_TAG, szBuf);
+	
+	android_printLog(LOG_DEBUG, LOG_TAG, "%s : %s\n", szInfo, szLog);
 	return 0;
-    #else
+#else
 	int olderr = errno;
 	int ret;
 	va_list args;
@@ -354,7 +352,7 @@ int ntfs_log_redirect(const char *function, const char *file,
 
 	errno = olderr;
 	return ret;
-	#endif
+#endif
 }
 
 

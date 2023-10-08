@@ -138,12 +138,14 @@ struct fuse_file_lock {
  * FUSE_BIG_WRITES: allow big writes to be issued to the file system
  * FUSE_DONT_MASK: don't apply umask to file mode on create operations
  * FUSE_HAS_IOCTL_DIR: kernel supports ioctl on directories
+ * FUSE_POSIX_ACL: kernel supports Posix ACLs
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
 #define FUSE_BIG_WRITES		(1 << 5)
 #define FUSE_DONT_MASK		(1 << 6)
 #define FUSE_HAS_IOCTL_DIR	(1 << 11)
+#define FUSE_POSIX_ACL		(1 << 19)
 
 /**
  * Release flags
@@ -188,6 +190,9 @@ enum fuse_opcode {
 	FUSE_BMAP          = 37,
 	FUSE_DESTROY       = 38,
 	FUSE_IOCTL         = 39,
+
+	/* Android specific operations */
+	FUSE_CANONICAL_PATH     = 2016,
 };
 
 /* The read buffer is required to be at least 8k, but may be much larger */
